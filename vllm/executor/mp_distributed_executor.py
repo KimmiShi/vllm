@@ -86,31 +86,39 @@ class MultiprocessingDistributedExecutor(DistributedExecutorBase):
             self.worker_monitor = None
         else:
             result_handler = ResultHandler()
-            for rank in range(1, world_size):
-                worker = ProcessWorkerWrapper(result_handler,
-                                              WorkerWrapperBase,
-                                              self.vllm_config, rank)
-                self.workers.append(worker)
-                if rank % tensor_parallel_size == 0:
-                    self.tp_driver_workers.append(worker)
-                else:
-                    self.non_driver_workers.append(worker)
 
-            self.worker_monitor = WorkerMonitor(self.workers, result_handler)
-            result_handler.start()
-            self.worker_monitor.start()
+            # sdx: for DPP-style mp, no worker process is needed
+            self.worker_monitor = None
+            # for rank in range(1, world_size):
+            #     worker = ProcessWorkerWrapper(result_handler,
+            #                                   WorkerWrapperBase,
+            #                                   self.vllm_config, rank)
+            #     self.workers.append(worker)
+            #     if rank % tensor_parallel_size == 0:
+            #         self.tp_driver_workers.append(worker)
+            #     else:
+            #         self.non_driver_workers.append(worker)
+
+            # self.worker_monitor = WorkerMonitor(self.workers, result_handler)
+            # result_handler.start()
+            # self.worker_monitor.start()
 
         # Set up signal handlers to shutdown the executor cleanly
         # sometimes gc does not work well
 
         self.driver_worker = WorkerWrapperBase(self.vllm_config, 0)
-
+        # breakpoint()
         all_kwargs = []
         distributed_init_method = get_distributed_init_method(
             get_ip(), get_open_port())
         for i in range(world_size):
             local_rank = i
             rank = i
+
+            # # by sdx: run on DDP inited process
+            # local_rank = int(os.environ['LOCAL_RANK'])
+            # rank = int(os.environ['RANK'])
+
             kwargs = dict(
                 vllm_config=self.vllm_config,
                 local_rank=local_rank,
@@ -122,10 +130,13 @@ class MultiprocessingDistributedExecutor(DistributedExecutorBase):
             all_kwargs.append(kwargs)
         self._run_workers("init_worker", all_kwargs)
         self._run_workers("init_device")
+        # breakpoint()
         self._run_workers("load_model",
                           max_concurrent_workers=self.parallel_config.
                           max_parallel_loading_workers)
+
         self.driver_exec_model = make_async(self.driver_worker.execute_model)
+        # self.driver_exec_model = self.driver_worker.execute_model
         self.pp_locks: Optional[List[asyncio.Lock]] = None
 
     def shutdown(self):
@@ -141,7 +152,13 @@ class MultiprocessingDistributedExecutor(DistributedExecutorBase):
         Passing None will cause the driver to stop the model execution
         loop running in each of the remote workers.
         """
-        return self.driver_worker.execute_model(execute_model_req)
+        # breakpoint()
+        out = self.driver_worker.execute_model(execute_model_req)
+        # print(f"{out is None = }, {os.environ['RANK'] =}", flush=True)
+        # if out is None:
+        #     print(f"out is None!!!!!!!!!, {os.environ['RANK'] =}", flush=True)
+        #     breakpoint()
+        return out
 
     def _run_workers(
         self,
@@ -185,6 +202,7 @@ class MultiprocessingDistributedExecutor(DistributedExecutorBase):
         driver_worker_output = run_method(self.driver_worker, sent_method,
                                           args, kwargs)
 
+        # breakpoint()
         # Get the results of the workers.
         return [driver_worker_output
                 ] + [output.get() for output in worker_outputs]
@@ -205,6 +223,7 @@ class MultiprocessingDistributedExecutor(DistributedExecutorBase):
         self,
         execute_model_req: Optional[ExecuteModelRequest] = None
     ) -> List[SamplerOutput]:
+        breakpoint()
         if not self.tp_driver_workers:
             return await self.driver_exec_model(execute_model_req)
 

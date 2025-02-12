@@ -439,7 +439,6 @@ class LLMEngine:
         # distributed_executor_backend must be set in VllmConfig.__post_init__
         distributed_executor_backend = (
             engine_config.parallel_config.distributed_executor_backend)
-        # breakpoint()
         # Initialize the cluster and specify the executor class.
         if isinstance(distributed_executor_backend, type):
             if not issubclass(distributed_executor_backend, ExecutorBase):
@@ -1076,6 +1075,10 @@ class LLMEngine:
                 output = outputs_by_sequence_group[i]
             else:
                 output = [outputs_by_sequence_group[0][i]]
+                # try:
+                #     output = [outputs_by_sequence_group[0][i]]
+                # except Exception as e:
+                #     breakpoint()
 
             if not is_async:
                 if self.scheduler_config.is_multi_step:

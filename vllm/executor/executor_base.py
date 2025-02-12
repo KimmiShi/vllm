@@ -27,7 +27,7 @@ class ExecutorBase(ABC):
     """Base class for all executors.
 
     An executor is responsible for executing the model on one device,
-    or it can be a distributed executor 
+    or it can be a distributed executor
     that can execute the model on multiple devices.
     """
 
@@ -78,7 +78,7 @@ class ExecutorBase(ABC):
 
         Returns:
             A list containing the results from each worker.
-        
+
         Note:
             It is recommended to use this API to only pass control messages,
             and set up data-plane communication to pass data.
@@ -273,7 +273,11 @@ class DistributedExecutorBase(ExecutorBase):
 
         # Only the driver worker returns the sampling results.
         driver_outputs = self._driver_execute_model(execute_model_req)
-        assert driver_outputs is not None
+        # assert driver_outputs is not None
+        # breakpoint()
+        if driver_outputs is None:
+            # breakpoint()
+            driver_outputs = []
         return driver_outputs
 
     def stop_remote_worker_execution_loop(self) -> None:
@@ -322,7 +326,7 @@ class DistributedExecutorBase(ExecutorBase):
                 run only in the remote TP workers, not the driver worker.
                 It will also be run asynchronously and return a list of futures
                 rather than blocking on the results.
-        
+
         # TODO: simplify and merge with collective_rpc
         """
         raise NotImplementedError
