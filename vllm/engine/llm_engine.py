@@ -232,8 +232,9 @@ class LLMEngine:
         )
 
         logger.info(
-            "Initializing a V0 LLM engine (v%s) with config: %s, "
+            "RANK: %s, Initializing a V0 LLM engine (v%s) with config: %s, "
             "use_cached_outputs=%s, ",
+            str(torch.distributed.get_rank()),
             VLLM_VERSION,
             vllm_config,
             use_cached_outputs,
@@ -272,6 +273,7 @@ class LLMEngine:
 
         self.model_executor = executor_class(vllm_config=vllm_config, )
 
+        # breakpoint()
         if self.model_config.runner_type != "pooling":
             self._initialize_kv_caches()
 
@@ -425,7 +427,7 @@ class LLMEngine:
 
         self.cache_config.num_gpu_blocks = num_gpu_blocks
         self.cache_config.num_cpu_blocks = num_cpu_blocks
-
+        # breakpoint()
         self.model_executor.initialize_cache(num_gpu_blocks, num_cpu_blocks)
         elapsed = time.time() - start
         logger.info(("init engine (profile, create kv cache, "
@@ -437,6 +439,7 @@ class LLMEngine:
         # distributed_executor_backend must be set in VllmConfig.__post_init__
         distributed_executor_backend = (
             engine_config.parallel_config.distributed_executor_backend)
+        # breakpoint()
         # Initialize the cluster and specify the executor class.
         if isinstance(distributed_executor_backend, type):
             if not issubclass(distributed_executor_backend, ExecutorBase):
@@ -481,6 +484,7 @@ class LLMEngine:
         engine_config = engine_args.create_engine_config(usage_context)
         executor_class = cls._get_executor_cls(engine_config)
         # Create the LLM engine.
+        # breakpoint()
         engine = cls(
             vllm_config=engine_config,
             executor_class=executor_class,

@@ -239,6 +239,7 @@ class LLM:
         # Logic to switch between engines is done at runtime instead of import
         # to avoid import order issues
         self.engine_class = self.get_engine_class()
+        print(f"{torch.distributed.get_rank() = }, self.engine_class.from_engine_args", flush=True)
         self.llm_engine = self.engine_class.from_engine_args(
             engine_args, usage_context=UsageContext.LLM_CLASS)
 
@@ -491,7 +492,7 @@ class LLM:
 
         Returns:
             A list containing the results from each worker.
-        
+
         Note:
             It is recommended to use this API to only pass control messages,
             and set up data-plane communication to pass data.
@@ -1215,16 +1216,16 @@ class LLM:
         The caller should guarantee that no requests are being processed
         during the sleep period, before `wake_up` is called.
 
-        :param level: The sleep level. Level 1 sleep will offload the model 
-            weights and discard the kv cache. The content of kv cache is 
-            forgotten. Level 1 sleep is good for sleeping and waking up the 
-            engine to run the same model again. The model weights are backed 
-            up in CPU memory. Please make sure there's enough CPU memory to 
-            store the model weights. Level 2 sleep will discard both the model 
-            weights and the kv cache. The content of both the model weights 
-            and kv cache is forgotten. Level 2 sleep is good for sleeping and 
-            waking up the engine to run a different model or update the model, 
-            where previous model weights are not needed. It reduces CPU memory 
+        :param level: The sleep level. Level 1 sleep will offload the model
+            weights and discard the kv cache. The content of kv cache is
+            forgotten. Level 1 sleep is good for sleeping and waking up the
+            engine to run the same model again. The model weights are backed
+            up in CPU memory. Please make sure there's enough CPU memory to
+            store the model weights. Level 2 sleep will discard both the model
+            weights and the kv cache. The content of both the model weights
+            and kv cache is forgotten. Level 2 sleep is good for sleeping and
+            waking up the engine to run a different model or update the model,
+            where previous model weights are not needed. It reduces CPU memory
             pressure.
         """
         self.reset_prefix_cache()

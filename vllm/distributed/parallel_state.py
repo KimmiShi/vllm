@@ -335,7 +335,7 @@ class GroupCoordinator:
                 return input_
             except ImportError:
                 """
-                Intel IPEX not found. Falling back to PyTorch native 
+                Intel IPEX not found. Falling back to PyTorch native
                 all_reduce for CPU
                 """
                 torch.distributed.all_reduce(input_, group=self.device_group)
@@ -1000,10 +1000,11 @@ def initialize_model_parallel(
     Initialize model parallel groups.
 
     Arguments:
-        tensor_model_parallel_size: number of GPUs used for tensor model
-            parallelism.
-        pipeline_model_parallel_size: number of GPUs used for pipeline model
-            parallelism.
+        tensor_model_parallel_size: number of GPUs used for tensor model parallelism.
+        pipeline_model_parallel_size: number of GPUs used for pipeline model parallelism.
+        data_parallel_size: number of GPUs used for data parallelism. If not provided,
+            it will be calculated as world_size / (tensor_model_parallel_size * pipeline_model_parallel_size).
+        backend: backend for distributed communication.
 
     Let's say we have a total of 8 GPUs denoted by g0 ... g7 and we
     use 2 GPUs to parallelize the model tensor, and 4 GPUs to parallelize
@@ -1021,44 +1022,72 @@ def initialize_model_parallel(
     # Get world size and rank. Ensure some consistencies.
     assert torch.distributed.is_initialized()
     world_size: int = torch.distributed.get_world_size()
-    backend = backend or torch.distributed.get_backend(
-        get_world_group().device_group)
+    backend = backend or torch.distributed.get_backend(get_world_group().device_group)
+
+    data_parallel_size = world_size // (tensor_model_parallel_size * pipeline_model_parallel_size)
+
+    # Ensure world_size is consistent with tensor, pipeline, and data parallel sizes
+    if world_size != tensor_model_parallel_size * pipeline_model_parallel_size * data_parallel_size:
+        raise RuntimeError(
+            f"world_size ({world_size}) is not equal to "
+            f"tensor_model_parallel_size ({tensor_model_parallel_size}) x "
+            f"pipeline_model_parallel_size ({pipeline_model_parallel_size}) x "
+            f"data_parallel_size ({data_parallel_size})"
+        )
 
     # Build the tensor model-parallel groups.
-    num_tensor_model_parallel_groups: int = (world_size //
-                                             tensor_model_parallel_size)
+    num_tensor_model_parallel_groups: int = world_size // tensor_model_parallel_size
     global _TP
-    assert _TP is None, ("tensor model parallel group is already initialized")
+    assert _TP is None, "tensor model parallel group is already initialized"
     group_ranks = []
     for i in range(num_tensor_model_parallel_groups):
-        ranks = list(
-            range(i * tensor_model_parallel_size,
-                  (i + 1) * tensor_model_parallel_size))
+        ranks = list(range(i * tensor_model_parallel_size, (i + 1) * tensor_model_parallel_size))
         group_ranks.append(ranks)
 
     # message queue broadcaster is only used in tensor model parallel group
-    _TP = init_model_parallel_group(group_ranks,
-                                    get_world_group().local_rank,
-                                    backend,
-                                    use_message_queue_broadcaster=True,
-                                    group_name="tp")
+    _TP = init_model_parallel_group(
+        group_ranks,
+        get_world_group().local_rank,
+        backend,
+        use_message_queue_broadcaster=True,
+        group_name="tp"
+    )
 
     # Build the pipeline model-parallel groups.
-    num_pipeline_model_parallel_groups: int = (world_size //
-                                               pipeline_model_parallel_size)
+    num_pipeline_model_parallel_groups: int = world_size // pipeline_model_parallel_size
     global _PP
-    assert _PP is None, (
-        "pipeline model parallel group is already initialized")
+    assert _PP is None, "pipeline model parallel group is already initialized"
     group_ranks = []
     for i in range(num_pipeline_model_parallel_groups):
         ranks = list(range(i, world_size, num_pipeline_model_parallel_groups))
         group_ranks.append(ranks)
+
     # pipeline parallel does not need custom allreduce
-    _PP = init_model_parallel_group(group_ranks,
-                                    get_world_group().local_rank,
-                                    backend,
-                                    use_custom_allreduce=False,
-                                    group_name="pp")
+    _PP = init_model_parallel_group(
+        group_ranks,
+        get_world_group().local_rank,
+        backend,
+        use_custom_allreduce=False,
+        group_name="pp"
+    )
+
+    # # Build the data-parallel groups.
+    # num_data_parallel_groups: int = world_size // data_parallel_size
+    # global _DP
+    # assert _DP is None, "data parallel group is already initialized"
+    # group_ranks = []
+    # for i in range(num_data_parallel_groups):
+    #     ranks = list(range(i, world_size, num_data_parallel_groups))
+    #     group_ranks.append(ranks)
+
+    # # data parallel does not need custom allreduce
+    # _DP = init_model_parallel_group(
+    #     group_ranks,
+    #     get_world_group().local_rank,
+    #     backend,
+    #     use_custom_allreduce=False,
+    #     group_name="dp"
+    # )
 
 
 def ensure_kv_transfer_initialized(vllm_config: "VllmConfig") -> None:

@@ -27,8 +27,8 @@ class UniProcExecutor(ExecutorBase):
                                                rpc_rank=0)
         distributed_init_method = get_distributed_init_method(
             get_ip(), get_open_port())
-        local_rank = 0
-        rank = 0
+        local_rank = int(os.environ['LOCAL_RANK'])
+        rank = int(os.environ['RANK'])
         kwargs = dict(
             vllm_config=self.vllm_config,
             local_rank=local_rank,
@@ -37,6 +37,7 @@ class UniProcExecutor(ExecutorBase):
             is_driver_worker=(not self.parallel_config)
             or (rank % self.parallel_config.tensor_parallel_size == 0),
         )
+        # breakpoint()
         self.collective_rpc("init_worker", args=([kwargs], ))
         self.collective_rpc("init_device")
         self.collective_rpc("load_model")
@@ -118,10 +119,10 @@ class ExecutorWithExternalLauncher(UniProcExecutor):
         """
         Determine the number of available KV blocks.
         Add an additional all_reduce to get the min across all ranks.
-        Note that even if we have the same `gpu_memory_utilization` and 
-        `swap_space`, the available memory in every rank might still 
-        differ because NCCL can take different amounts of memory in 
-        different ranks. Therefore, it is necessary to test if all ranks 
+        Note that even if we have the same `gpu_memory_utilization` and
+        `swap_space`, the available memory in every rank might still
+        differ because NCCL can take different amounts of memory in
+        different ranks. Therefore, it is necessary to test if all ranks
         agree on the same KV cache configuration.
         """
         a, b = super().determine_num_available_blocks()
